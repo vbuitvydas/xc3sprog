@@ -316,6 +316,59 @@ int ProgAlgSPIFlash::spi_flashinfo_at45(unsigned char *buf)
   return 1;
 }
 
+int ProgAlgSPIFlash::spi_flashinfo_at25(unsigned char *buf)
+{
+  byte fbuf[21]= {READ_IDENTIFICATION};
+  int i, j = 0;
+
+  spi_xfer_user1(NULL,0,0,fbuf,20,1);
+  spi_xfer_user1(fbuf, 20, 1, NULL,0, 0);
+
+  fbuf[0] = bitRevTable[fbuf[0]];
+  fbuf[1] = bitRevTable[fbuf[1]];
+  fbuf[2] = bitRevTable[fbuf[2]];
+  fbuf[3] = bitRevTable[fbuf[3]];
+
+    switch (fbuf[1])
+      {
+      case 0x42:
+        fprintf(stderr, "Found Adesto AT25SL Device, Device ID 0x%02x%02x\n",
+                fbuf[1], fbuf[2]);
+        switch (fbuf[2])
+          {
+          case 0x16:
+            pages = 131072;
+            sector_size = 65536;
+            break;
+          default:
+            fprintf(stderr,"Unexpected AT25SL size ID 0x%02x\n", buf[2]);
+            return -1;
+          }
+        break;
+
+      default:
+        fprintf(stderr,"AT25SL: Unexpected RDID upper Device ID 0x%02x\n", fbuf[1]);
+        return -1;
+      }
+
+  pgsize = 256;
+
+  if (fbuf[3] == 0x10)
+    {
+      for (i= 4; i<20 ; i++)
+       j+=fbuf[i];
+      if (j != 0)
+       {
+         fprintf(stderr,"CFI: ");
+         for (i= 5; i<21 ; i++)
+           fprintf(stderr,"%02x", fbuf[i]);
+
+         fprintf(stderr, " \n");
+       }
+    }
+  return 1;
+}
+
 int ProgAlgSPIFlash::spi_flashinfo_sst(unsigned char *buf)
 {
        fprintf(stderr, "Found SST device, Device ID 0x%02x%02x\n",
@@ -372,6 +425,11 @@ int ProgAlgSPIFlash::spi_flashinfo_m25p_mx25l(unsigned char *buf, int is_mx25l)
           {
           case 0x17:
             pages = 262144;
+            sector_size = 65536;
+            break;
+          case 0x19:
+            pages = 1048576;
+            //pages = 262144;
             sector_size = 65536;
             break;
           default:
@@ -556,7 +614,9 @@ int ProgAlgSPIFlash::spi_flashinfo(void)
   
   manf_id = fbuf[0];
   prod_id = fbuf[1]<<8 | fbuf[2];
-  
+
+  family_code = fbuf[1]>> 5;
+
   switch (fbuf[0])
     {
     case 0x1f: {
@@ -565,8 +625,8 @@ int ProgAlgSPIFlash::spi_flashinfo(void)
             res = spi_flashinfo_at45(fbuf);
             break;
         case 2:
-            fprintf(stderr, "Unhandled AT25 device\n");
-            return -1;
+            res = spi_flashinfo_at25(fbuf);
+            break;
         default:
             fprintf(stderr, "Unhandled Adesto device\n");
             return -1;
@@ -1239,8 +1299,16 @@ int ProgAlgSPIFlash::program(BitFile &pfile)
       return -1;
     }
   switch (manf_id) {
-  case 0x1f: /* Atmel */
-    return program_at45(pfile);
+  case 0x1f: /* Atmel, Adesto*/
+    switch (family_code) /* Family code*/ {
+    case 1:
+        return program_at45(pfile);
+    case 2:
+        return sectorerase_and_program(pfile);
+    default:
+        fprintf(stderr, "Programming not yet implemented for this Adesto device\n");
+        return -1;
+    }
   case 0x20: /* Numonyx */
   case 0xc2: /* Macronix */
   case 0x30: /* AMIC */
@@ -1431,8 +1499,16 @@ int ProgAlgSPIFlash::erase_at45(void)
 int ProgAlgSPIFlash::erase(void) 
 {
   switch (manf_id) {
-  case 0x1f: /* Atmel */
-    return erase_at45();
+  case 0x1f: /* Atmel, Adesto */
+    switch (family_code) /* Family code*/ {
+    case 1:
+        return erase_at45();
+    case 2:
+        return erase_bulk();
+    default:
+        fprintf(stderr, "Erasing not yet implemented for this Adesto device\n");
+        return -1;
+    }
   case 0x20: /* Numonyx */
   case 0xc2: /* Macronix */
   case 0x30: /* AMIC */

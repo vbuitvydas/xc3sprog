@@ -53,6 +53,7 @@ class ProgAlgSPIFlash
   int sector_erase_cmd;
   int manf_id;
   int prod_id;
+  int family_code;
   byte *miso_buf;
   byte *mosi_buf;
   byte *buf;
@@ -66,6 +67,7 @@ class ProgAlgSPIFlash
   int spi_flashinfo_w25 (unsigned char * fbuf);
   int spi_flashinfo_issi(unsigned char * fbuf);
   int spi_flashinfo_at45(unsigned char * fbuf);
+  int spi_flashinfo_at25(unsigned char * fbuf);
   int spi_flashinfo_m25p_mx25l(unsigned char * fbuf, int is_mx25l);
   int spi_flashinfo_sst(unsigned char * fbuf);
   int wait(byte command, int report, int limit, double *delta);
